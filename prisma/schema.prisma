@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id       String @id @default(uuid())
+  email    String @unique
+  username String @unique
+  password String // hashed
+
+  name    String
+  bio     String?
+  phone   String?
+  job     String?
+  picture String?
+  country String?
+
+  isVerified Boolean  @default(false)
+  isActive   Boolean  @default(true)
+  IPs        String[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  posts    Post[]
+  likes    Like[]
+  links    Link[]
+  comments Comment[]
+
+  @@index([email])
+  @@index([username])
+  @@map("users")
+}
+
+model Post {
+  id        String   @id @default(uuid())
+  content   String
+  imageUrl  String?
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  comments Comment[]
+  likes    Like[]
+
+  @@index([authorId])
+  @@index([authorId, createdAt])
+  @@map("posts")
+}
+
+model Comment {
+  id      String @id @default(uuid())
+  content String
+
+  author   User   @relation(fields: [authorId], references: [id])
+  authorId String
+  post     Post   @relation(fields: [postId], references: [id])
+  postId   String
+  likes    Like[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([authorId])
+  @@index([postId])
+  @@map("comments")
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String?
+  user      User     @relation(fields: [userId], references: [id])
+  post      Post?    @relation(fields: [postId], references: [id])
+  comment   Comment? @relation(fields: [commentId], references: [id])
+  commentId String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+  @@unique([userId, commentId])
+  @@index([userId])
+  @@index([postId])
+  @@index([commentId])
+  @@map("likes")
+}
+
+model Link {
+  id       String    @id @default(uuid())
+  platform Platforms
+  url      String
+  user     User      @relation(fields: [userId], references: [id])
+  userId   String
+
+  @@index([userId])
+  @@map("links")
+}
+
+enum Platforms {
+  Facebook
+  LinkedIn
+  YouTube
+  Instagram
+  Qabilah
+  X
+  TikTok
+  GitHub
+}
