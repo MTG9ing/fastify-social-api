@@ -1,3 +1,5 @@
+// TODO: Review
+
 generator client {
   provider = "prisma-client-js"
   output   = "../node_modules/.prisma/client"
@@ -66,6 +68,8 @@ model User {
   ownedGroups           Group[]               @relation("OwnedGroups") // Groups created by this user
   groupMemberships      GroupMember[]         @relation("GroupMembership") // Groups this user is a member of
   receivedReplies       Comment[]             @relation("RepliesToUser")
+  authoredStories       Story[]               @relation("AuthoredStories") // Stories created by this user
+  viewedStories         StoryView[]           @relation("ViewedStories") // Stories this user has viewed
 
   @@map("auth_users")
 }
@@ -632,4 +636,51 @@ model DailyMetric {
 
   @@unique([date, type]) // Only one record per metric per day
   @@map("analytics_daily_metrics")
+}
+
+enum StoryType {
+  IMAGE
+  VIDEO
+  TEXT // ⬅️ NEW: For text-only backgrounds
+}
+
+model Story {
+  id String @id @default(uuid())
+
+  authorId String
+  author   User   @relation("AuthoredStories", fields: [authorId], references: [id])
+
+  // Content Fields - Now flexible
+  caption  String? // The main text of the story (if text-only, or overlay for media)
+  mediaUrl String? // URL to the hosted image or video (Optional)
+  type     StoryType // Must be set (IMAGE, VIDEO, or TEXT)
+
+  // ⬅️ NEW: Display Fields for Text-Only Stories
+  backgroundColor String? // e.g., "#FF0000" or gradient key
+  fontStyleJson   String? // e.g., JSON storing font, size, and text color settings
+  // ⬅️ NEW
+
+  // Tracking & Expiry
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime // Typically calculated as createdAt + 24 hours
+  viewsCount Int      @default(0)
+
+  views StoryView[] // Individual view records
+
+  @@index([authorId, createdAt])
+  @@index([expiresAt])
+  @@map("content_stories")
+}
+
+model StoryView {
+  id       String   @id @default(uuid())
+  storyId  String
+  story    Story    @relation(fields: [storyId], references: [id])
+  viewerId String
+  viewer   User     @relation("ViewedStories", fields: [viewerId], references: [id])
+  viewedAt DateTime @default(now())
+
+  @@unique([storyId, viewerId])
+  @@index([viewerId, viewedAt])
+  @@map("analytics_story_views")
 }
