@@ -15,7 +15,7 @@
     "format": "prettier --write \"source/**/*.ts\"",
     "typecheck": "tsc --noEmit"
   },
-  "author": "Mohammed Ghazy <officialmohammedtalaat.com>",
+  "author": "Mohammed Ghazy <officialmohammedtalaat@gmail.com>",
   "license": "MIT",
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

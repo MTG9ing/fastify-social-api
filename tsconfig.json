@@ -19,7 +19,7 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
-    "erasableSyntaxOnly": true
+    // "erasableSyntaxOnly": true
   },
   "exclude": [
     "node_modules"
