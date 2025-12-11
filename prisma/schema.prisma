@@ -1,0 +1,710 @@
+// TODO: Review
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER // Standard user access
+  MODERATOR // Limited administrative powers (e.g., content removal)
+  ADMIN // Full system access (protected API endpoints)
+}
+
+enum UserStatus {
+  ACTIVE
+  PENDING_VERIFICATION // Must verify email before login
+  SUSPENDED // Temporarily restricted
+  BANNED // Permanent restriction
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  ACTION_TAKEN // e.g., Post deleted, User suspended
+  REJECTED // Report deemed invalid
+}
+
+enum RequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELED // Optional: If the sender retracts it
+}
+
+enum ReactionType {
+  LIKE
+  LOVE
+  HAHA
+  SAD
+  ANGRY
+}
+
+enum Visibility {
+  PUBLIC
+  FOLLOWERS
+  PRIVATE
+  FRIENDS // Only visible to users in the Friendship table
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  GIF
+}
+
+enum MetricType {
+  NEW_USERS
+  TOTAL_POSTS
+  DAILY_ACTIVE_USERS // DAU
+  NEW_FRIENDSHIPS
+}
+
+enum GroupPrivacy {
+  PUBLIC // Visible and joinable by anyone
+  PRIVATE // Visible, but requires approval/invite
+  HIDDEN // Not visible in searches/lists, invite only
+}
+
+enum GroupRole {
+  MEMBER
+  MODERATOR
+  ADMIN
+  OWNER
+}
+
+enum Platforms {
+  FACEBOOK
+  LINKEDIN
+  QABILAH
+  YOUTUBE
+  INSTAGRAM
+  X // Formerly Twitter
+  TIKTOK
+  GITHUB
+  PERSONAL_WEBSITE // Good generic option
+}
+
+enum NotificationType {
+  POST_LIKE // Triggered when a user likes a post
+  COMMENT_REPLY // Triggered when a user replies to a comment
+  POST_COMMENT // Triggered when a user comments on your post
+  FRIEND_REQUEST // Triggered when someone sends a friend request
+  FRIEND_ACCEPTED // Triggered when a friend request is accepted
+  USER_MENTION // Triggered when a user is tagged (@user)
+  SYSTEM_ALERT // e.g., Your subscription is expiring
+}
+
+enum StoryType {
+  IMAGE
+  VIDEO
+  TEXT // ⬅️ NEW: For text-only backgrounds
+}
+
+model User {
+  id        String     @id @default(uuid())
+  email     String     @unique
+  password  String
+  role      Role       @default(USER)
+  status    UserStatus @default(PENDING_VERIFICATION)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // IDENTITY & SECURITY
+  profile            Profile?
+  sessions           Session[]
+  resetToken         PasswordResetToken[]
+  verificationTokens VerificationToken[]
+
+  // ADVANCED AUTH & MODERATION
+  userPermissions UserPermission[]
+  reportsFiled    Report[]         @relation("ReportsFiled") // Reports this user filed
+
+  // SOCIAL GRAPH
+  following        Follow[]        @relation("Followers") // Users I follow
+  followers        Follow[]        @relation("Following") // Users who follow me
+  blocking         Block[]         @relation("Blocker") // Users I block
+  blockedBy        Block[]         @relation("Blocked") // Users who block me
+  sentRequests     FriendRequest[] @relation("SentRequests")
+  receivedRequests FriendRequest[] @relation("ReceivedRequests")
+  friendshipsA     Friendship[]    @relation("FriendA")
+  friendshipsB     Friendship[]    @relation("FriendB")
+
+  comments              Comment[]
+  postReactions         PostReaction[]
+  commentReactions      CommentReaction[]
+  posts                 Post[]                @relation("PostAuthor")
+  mediaRecords          Media[]               @relation("UserMedia")
+  receivedNotifications Notification[]        @relation("ReceivedNotifications")
+  sentNotifications     Notification[]        @relation("SentNotifications")
+  notificationSettings  NotificationSettings?
+  postViews             PostView[]            @relation("ViewsByUser")
+  ownedGroups           Group[]               @relation("OwnedGroups") // Groups created by this user
+  groupMemberships      GroupMember[]         @relation("GroupMembership") // Groups this user is a member of
+  receivedReplies       Comment[]             @relation("RepliesToUser")
+  authoredStories       Story[]               @relation("AuthoredStories") // Stories created by this user
+  viewedStories         StoryView[]           @relation("ViewedStories") // Stories this user has viewed
+  auditLogsAsActor      AuditLog[]            @relation("AuditActor")
+
+  @@map("users")
+}
+
+model Profile {
+  id String @id @default(uuid())
+
+  // 1-to-1 Link
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+
+  // Public Vanity Data
+  username    String  @unique
+  displayName String
+  bio         String?
+  avatarUrl   String? // Link to Media table
+
+  // Onboarding & Activity
+  onboardingStep    Int      @default(0)
+  isProfileComplete Boolean  @default(false)
+  lastActiveAt      DateTime @default(now()) // For "Last Seen" feature
+
+  // Optional Demographic/Meta Data
+  birthday    DateTime?
+  gender      String?
+  websiteUrl  String?
+  locale      String?
+  timezone    String?
+  socialLinks SocialLink[]
+
+  @@map("profiles")
+}
+
+model Session {
+  id     String  @id @default(uuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  refreshToken String  @unique
+  ipAddress    String
+  deviceType   String?
+
+  expiresAt DateTime
+  isRevoked Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([refreshToken])
+  @@map("sessions")
+}
+
+model PasswordResetToken {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  tokenHash String   @unique // Hashed token sent in the link
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("password_reset_tokens")
+}
+
+model VerificationToken {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  tokenHash String   @unique
+  type      String // e.g., 'EMAIL_VERIFICATION', 'EMAIL_CHANGE'
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("verification_tokens")
+}
+
+model LoginAttempt {
+  id        String  @id @default(uuid())
+  email     String // The email attempted (whether it exists or not)
+  ipAddress String
+  success   Boolean // True if the attempt succeeded
+
+  attemptedAt DateTime @default(now())
+
+  // Indexed for quick lookup: Is this IP/Email attempting too many times?
+  @@index([email])
+  @@index([ipAddress])
+  @@map("login_attempts")
+}
+
+model IPBan {
+  id             String    @id @default(uuid())
+  ipAddress      String    @unique
+  reason         String
+  bannedByUserId String? // Who issued the ban
+  expiresAt      DateTime? // Null for permanent ban
+  createdAt      DateTime  @default(now())
+
+  @@map("ip_bans")
+}
+
+model Permission {
+  id          String  @id @default(uuid())
+  name        String  @unique // e.g., 'POST:DELETE_ANY', 'GROUP:UPDATE_SETTINGS'
+  description String?
+
+  userPermissions UserPermission[]
+
+  @@map("permissions")
+}
+
+model Report {
+  id         String @id @default(uuid())
+  reporterId String
+  reporter   User   @relation("ReportsFiled", fields: [reporterId], references: [id]) // Corrected
+
+  targetId   String
+  targetType String
+
+  reason String
+  status ReportStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([targetId, targetType])
+  @@map("reports")
+}
+
+model UserPermission {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  // For Resource-based Authorization (e.g., this permission only applies to a specific Group)
+  resourceId   String? // ID of the group, post, or resource
+  resourceType String? // e.g., 'GROUP', 'POST'
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, permissionId, resourceId, resourceType]) // User can only have one permission per resource
+  @@index([userId, resourceId, resourceType])
+  @@map("user_permissions")
+}
+
+// A. Follow: Asymmetric (A follows B, B doesn't necessarily follow A)
+model Follow {
+  id String @id @default(uuid())
+
+  followerId String
+  follower   User   @relation("Followers", fields: [followerId], references: [id])
+
+  followingId String
+  following   User   @relation("Following", fields: [followingId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([followerId, followingId])
+  @@map("follows")
+}
+
+// B. Block: Privacy constraint
+model Block {
+  id String @id @default(uuid())
+
+  blockerId String
+  blocker   User   @relation("Blocker", fields: [blockerId], references: [id])
+
+  blockedId String
+  blocked   User   @relation("Blocked", fields: [blockedId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+  @@map("blocks")
+}
+
+// C. FriendRequest: The state required to establish mutual connection
+model FriendRequest {
+  id String @id @default(uuid())
+
+  senderId String
+  sender   User   @relation("SentRequests", fields: [senderId], references: [id])
+
+  receiverId String
+  receiver   User   @relation("ReceivedRequests", fields: [receiverId], references: [id])
+
+  status RequestStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([senderId, receiverId]) // Ensures sender cannot request the same person twice
+  @@map("friend_requests")
+}
+
+// D. Friendship: The final, mutual connection
+model Friendship {
+  id String @id @default(uuid())
+
+  // Storing IDs canonically (e.g., alphabetically) ensures only one record exists for the pair {A, B}
+  userAId String
+  userA   User   @relation("FriendA", fields: [userAId], references: [id])
+
+  userBId String
+  userB   User   @relation("FriendB", fields: [userBId], references: [id])
+
+  establishedAt DateTime @default(now())
+
+  @@unique([userAId, userBId]) // Unique constraint on the pair (assuming canonical ordering enforced by app logic)
+  @@map("friendships")
+}
+
+// ----------------------------------------------------
+// A. Comment: Supports Nesting
+// ----------------------------------------------------
+// ----------------------------------------------------
+// A. Comment: Supports Nesting and Targeted Reply
+// ----------------------------------------------------
+model Comment {
+  id       String @id @default(uuid())
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+
+  postId String
+  post   Post   @relation(fields: [postId], references: [id])
+
+  content   String
+  isDeleted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Self-Reference for Nesting (The crucial part)
+  parentId String? // ID of the parent comment (null if top-level)
+  parent   Comment?  @relation("Replies", fields: [parentId], references: [id])
+  replies  Comment[] @relation("Replies") // List of all nested replies
+
+  // ⬅️ NEW: Targeted Reply Link
+  replyingToId String? // The user ID being directly replied to (for UI display: "@Alice")
+  replyingTo   User?   @relation("RepliesToUser", fields: [replyingToId], references: [id])
+  // ⬅️ NEW
+
+  // Relations to Reactions
+  reactions CommentReaction[]
+
+  @@index([postId, createdAt])
+  @@index([authorId])
+  @@index([parentId])
+  @@index([replyingToId]) // Good for finding all replies directed at a user
+  @@map("comments")
+}
+
+// ----------------------------------------------------
+// B. PostReaction: Uniqueness on Post
+// ----------------------------------------------------
+model PostReaction {
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  postId String
+  post   Post   @relation(fields: [postId], references: [id])
+
+  type      ReactionType
+  createdAt DateTime     @default(now())
+
+  @@id([userId, postId]) // A user can only react to a post once (though they can change the reaction type)
+  @@map("post_reactions")
+}
+
+// ----------------------------------------------------
+// C. CommentReaction: Uniqueness on Comment
+// ----------------------------------------------------
+model CommentReaction {
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  commentId String
+  comment   Comment @relation(fields: [commentId], references: [id])
+
+  type      ReactionType
+  createdAt DateTime     @default(now())
+
+  @@id([userId, commentId]) // A user can only react to a comment once
+  @@map("comment_reactions")
+}
+
+model Post {
+  id String @id @default(uuid())
+
+  authorId String
+  author   User   @relation("PostAuthor", fields: [authorId], references: [id]) // ⬅️ Unique Relation Name Added
+
+  title   String
+  content String // The main text
+
+  isEdited   Boolean    @default(false)
+  isDeleted  Boolean    @default(false) // Soft delete
+  visibility Visibility @default(PUBLIC)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // RELATIONS
+  media     Media[] // 1-to-many attachments (images/videos)
+  comments  Comment[]
+  reactions PostReaction[]
+  tags      PostTag[] // Many-to-many join
+  views     PostView[]
+  groupId   String? // Null if it's a regular profile post
+  group     Group?         @relation(fields: [groupId], references: [id])
+
+  @@index([authorId, createdAt])
+  @@index([visibility, createdAt])
+  @@map("posts")
+}
+
+model Media {
+  id String @id @default(uuid())
+
+  // ⬅️ CRITICAL CHANGE: Defining the relation to the Uploader
+  uploadingUserId String
+  uploader        User   @relation("UserMedia", fields: [uploadingUserId], references: [id]) // ⬅️ NEW: uploader link
+
+  postId String?
+  post   Post?   @relation(fields: [postId], references: [id])
+
+  url              String
+  type             MediaType
+  sizeBytes        Int
+  processingStatus String
+
+  createdAt DateTime @default(now())
+
+  @@index([postId])
+  @@index([uploadingUserId])
+  @@map("media")
+}
+
+model Tag {
+  id         String @id @default(uuid())
+  name       String @unique // The hashtag itself (e.g., "programming")
+  usageCount Int    @default(0) // Cached count for performance
+
+  posts PostTag[]
+
+  @@map("tags")
+}
+
+model PostTag {
+  postId String
+  post   Post   @relation(fields: [postId], references: [id])
+
+  tagId String
+  tag   Tag    @relation(fields: [tagId], references: [id])
+
+  @@id([postId, tagId]) // Composite key
+  @@map("post_tags")
+}
+
+model SocialLink {
+  id        String  @id @default(uuid())
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id])
+
+  platform Platforms
+  url      String
+
+  // Allows a user to have multiple links to the same platform 
+  // (e.g., a "personal" GitHub and a "work" GitHub, though usually you enforce unique on platform/profileId)
+  @@unique([profileId, platform])
+  @@index([profileId])
+  @@map("social_links")
+}
+
+model Notification {
+  id String @id @default(uuid())
+
+  recipientId String
+  recipient   User   @relation("ReceivedNotifications", fields: [recipientId], references: [id])
+
+  senderId String? // Null for system notifications (e.g., subscription notice)
+  sender   User?   @relation("SentNotifications", fields: [senderId], references: [id])
+
+  type NotificationType
+
+  // Resource Pointers (polymorphic fields to point to the related object)
+  resourceId String? // The ID of the primary object (Post ID, Comment ID, Request ID)
+
+  isRead Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([recipientId, isRead, createdAt]) // Crucial index for dashboard performance
+  @@map("notifications")
+}
+
+model NotificationSettings {
+  id String @id @default(uuid())
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+
+  // Global Toggles
+  emailEnabled Boolean @default(true)
+  pushEnabled  Boolean @default(true)
+
+  // Per-Event Toggles (Allows user to fine-tune what they get alerted for)
+  postLike      Boolean @default(true)
+  commentReply  Boolean @default(true)
+  friendRequest Boolean @default(true)
+  systemAlert   Boolean @default(true) // Usually kept true for essential alerts
+
+  updatedAt DateTime @updatedAt
+
+  @@map("notification_settings")
+}
+
+model PostView {
+  id String @id @default(uuid())
+
+  // Who viewed it?
+  userId String?
+  user   User?   @relation("ViewsByUser", fields: [userId], references: [id])
+
+  // What was viewed?
+  postId String
+  post   Post   @relation(fields: [postId], references: [id])
+
+  ipAddress String? // For anonymous view de-duplication
+
+  viewedAt DateTime @default(now())
+
+  // We index on postId to quickly tally views for a specific post.
+  @@index([postId, viewedAt])
+  @@index([userId, postId])
+  @@map("post_views")
+}
+
+model Group {
+  id          String  @id @default(uuid())
+  name        String
+  slug        String  @unique
+  description String?
+  avatarUrl   String?
+
+  ownerId String
+  owner   User   @relation("OwnedGroups", fields: [ownerId], references: [id])
+
+  privacy GroupPrivacy @default(PUBLIC)
+
+  createdAt DateTime @default(now())
+
+  members GroupMember[] // All members of the group
+  posts   Post[] // All posts made in this group (requires Post model update)
+
+  @@index([ownerId])
+  @@map("groups")
+}
+
+model GroupMember {
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [id])
+
+  userId String
+  user   User   @relation("GroupMembership", fields: [userId], references: [id])
+
+  role     GroupRole @default(MEMBER)
+  joinedAt DateTime  @default(now())
+
+  @@id([groupId, userId]) // A user can only be in a group once
+  @@map("group_members")
+}
+
+model DailyMetric {
+  id    String     @id @default(uuid())
+  date  DateTime
+  type  MetricType
+  value Int
+
+  @@unique([date, type]) // Only one record per metric per day
+  @@map("daily_metrics")
+}
+
+model Story {
+  id String @id @default(uuid())
+
+  authorId String
+  author   User   @relation("AuthoredStories", fields: [authorId], references: [id])
+
+  // Content Fields - Now flexible
+  caption  String? // The main text of the story (if text-only, or overlay for media)
+  mediaUrl String? // URL to the hosted image or video (Optional)
+  type     StoryType // Must be set (IMAGE, VIDEO, or TEXT)
+
+  // ⬅️ NEW: Display Fields for Text-Only Stories
+  backgroundColor String? // e.g., "#FF0000" or gradient key
+  fontStyleJson   String? // e.g., JSON storing font, size, and text color settings
+  // ⬅️ NEW
+
+  // Tracking & Expiry
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime // Typically calculated as createdAt + 24 hours
+  viewsCount Int      @default(0)
+
+  views StoryView[] // Individual view records
+
+  @@index([authorId, createdAt])
+  @@index([expiresAt])
+  @@map("stories")
+}
+
+model StoryView {
+  id       String   @id @default(uuid())
+  storyId  String
+  story    Story    @relation(fields: [storyId], references: [id])
+  viewerId String
+  viewer   User     @relation("ViewedStories", fields: [viewerId], references: [id])
+  viewedAt DateTime @default(now())
+
+  @@unique([storyId, viewerId])
+  @@index([viewerId, viewedAt])
+  @@map("story_views")
+}
+
+model AuditLog {
+  id String @id @default(uuid())
+
+  // Who did it
+  actorId String?
+  actor   User?   @relation("AuditActor", fields: [actorId], references: [id])
+
+  // What happened
+  action   String // e.g., "USER_REGISTER", "POST_DELETE", "USER_BAN"
+  entity   String // e.g., "User", "Post", "Comment"
+  entityId String // ID of the thing that changed
+
+  // Optional: old/new values (JSON for flexibility)
+  oldValue Json?
+  newValue Json?
+
+  // Context
+  ipAddress String?
+  userAgent String?
+  metadata  Json? // anything extra (e.g., reason for ban)
+
+  // When
+  createdAt DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([entity, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
