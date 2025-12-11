@@ -1,4 +1,4 @@
-import bcrypt from "bcrypt"
+import bcrypt from "bcryptjs"
 
 export class BcryptHasher {
     private SALT = 10;

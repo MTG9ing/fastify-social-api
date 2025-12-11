@@ -1,13 +1,22 @@
-import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { JwtProvider } from '../../infrastructure/security/jwt.provider.ts';
 
-interface AuthenticatedRequest extends FastifyRequest {
+
+declare module 'fastify' {
+    interface FastifyInstance {
+        jwt: JwtProvider; // Declares the decorated property
+    }
+}
+export interface AuthenticatedRequest extends FastifyRequest {
   user?: { userId: string };  // ← This is what you want
 }
 
-const jwtAuthPlugin: FastifyPluginAsync = async (fastify) => {
-  // Decorator — adds user to request
-  fastify.decorateRequest('user', null as { userId: string } | null);
+export const jwtAuthPlugin: FastifyPluginAsync = async (fastify) => {
+  fastify.decorate('authenticate', async (request: AuthenticatedRequest, response: FastifyReply) => {
+        if (!request.user) {
+            response.code(401).send({ message: 'Authentication required.' });
+        }
+    });
 
   // Auth hook — runs on every request
   fastify.addHook('onRequest', async (request: AuthenticatedRequest) => {
@@ -19,13 +28,10 @@ const jwtAuthPlugin: FastifyPluginAsync = async (fastify) => {
     }
 
     try {
-        const jwt = new JwtProvider()
-        const decoded = jwt.verifyAccessToken(token);
+        const decoded = fastify.jwt.verifyAccessToken(token);
         request.user = { userId: decoded.userId };
     } catch {
       request.user = undefined;
     }
   });
 };
-
-export default jwtAuthPlugin;

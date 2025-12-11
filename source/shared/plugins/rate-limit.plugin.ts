@@ -1,11 +1,12 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import redisClient from '../../infrastructure/cache/redis.client.ts';
+import type { AuthenticatedRequest } from './jwt-authentication.plugin.ts';
 
 const IP_LIMIT = 100;     // 100 requests per minute per IP
 const USER_LIMIT = 500;   // 500 requests per minute per authenticated user
 
-const rateLimitPlugin: FastifyPluginAsync = async (fastify) => {
-  fastify.addHook('onRequest', async (request, reply) => {
+export const rateLimitPlugin: FastifyPluginAsync = async (fastify) => {
+  fastify.addHook('onRequest', async (request: AuthenticatedRequest, reply: FastifyReply) => {
     const ip = request.ip;
     const userId = request.user?.userId; // from jwt-auth plugin
 

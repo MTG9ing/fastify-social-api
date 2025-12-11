@@ -18,8 +18,7 @@
     "experimentalDecorators": true,
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    // "erasableSyntaxOnly": true
+    "verbatimModuleSyntax": true
   },
   "exclude": [
     "node_modules"

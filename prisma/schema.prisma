@@ -22,14 +22,97 @@ enum UserStatus {
   BANNED // Permanent restriction
 }
 
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  ACTION_TAKEN // e.g., Post deleted, User suspended
+  REJECTED // Report deemed invalid
+}
+
+enum RequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELED // Optional: If the sender retracts it
+}
+
+enum ReactionType {
+  LIKE
+  LOVE
+  HAHA
+  SAD
+  ANGRY
+}
+
+enum Visibility {
+  PUBLIC
+  FOLLOWERS
+  PRIVATE
+  FRIENDS // Only visible to users in the Friendship table
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  GIF
+}
+
+enum MetricType {
+  NEW_USERS
+  TOTAL_POSTS
+  DAILY_ACTIVE_USERS // DAU
+  NEW_FRIENDSHIPS
+}
+
+enum GroupPrivacy {
+  PUBLIC // Visible and joinable by anyone
+  PRIVATE // Visible, but requires approval/invite
+  HIDDEN // Not visible in searches/lists, invite only
+}
+
+enum GroupRole {
+  MEMBER
+  MODERATOR
+  ADMIN
+  OWNER
+}
+
+enum Platforms {
+  FACEBOOK
+  LINKEDIN
+  QABILAH
+  YOUTUBE
+  INSTAGRAM
+  X // Formerly Twitter
+  TIKTOK
+  GITHUB
+  PERSONAL_WEBSITE // Good generic option
+}
+
+enum NotificationType {
+  POST_LIKE // Triggered when a user likes a post
+  COMMENT_REPLY // Triggered when a user replies to a comment
+  POST_COMMENT // Triggered when a user comments on your post
+  FRIEND_REQUEST // Triggered when someone sends a friend request
+  FRIEND_ACCEPTED // Triggered when a friend request is accepted
+  USER_MENTION // Triggered when a user is tagged (@user)
+  SYSTEM_ALERT // e.g., Your subscription is expiring
+}
+
+enum StoryType {
+  IMAGE
+  VIDEO
+  TEXT // ⬅️ NEW: For text-only backgrounds
+}
+
 model User {
-  id           String     @id @default(uuid())
-  email        String     @unique
-  passwordHash String // Corrected field name
-  role         Role       @default(USER)
-  status       UserStatus @default(PENDING_VERIFICATION)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id        String     @id @default(uuid())
+  email     String     @unique
+  password  String
+  role      Role       @default(USER)
+  status    UserStatus @default(PENDING_VERIFICATION)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 
   // IDENTITY & SECURITY
   profile            Profile?
@@ -51,11 +134,6 @@ model User {
   friendshipsA     Friendship[]    @relation("FriendA")
   friendshipsB     Friendship[]    @relation("FriendB")
 
-  // CONTENT (Ready to be added)
-  // posts            Post[] // Will be defined next
-  // comments         Comment[] // Will be defined next
-  // postReactions    PostReaction[] // Will be defined next
-  // commentReactions CommentReaction[] // Will be defined next
   comments              Comment[]
   postReactions         PostReaction[]
   commentReactions      CommentReaction[]
@@ -70,8 +148,9 @@ model User {
   receivedReplies       Comment[]             @relation("RepliesToUser")
   authoredStories       Story[]               @relation("AuthoredStories") // Stories created by this user
   viewedStories         StoryView[]           @relation("ViewedStories") // Stories this user has viewed
+  auditLogsAsActor      AuditLog[]            @relation("AuditActor")
 
-  @@map("auth_users")
+  @@map("users")
 }
 
 model Profile {
@@ -100,7 +179,7 @@ model Profile {
   timezone    String?
   socialLinks SocialLink[]
 
-  @@map("user_profiles")
+  @@map("profiles")
 }
 
 model Session {
@@ -131,7 +210,7 @@ model PasswordResetToken {
   expiresAt DateTime
   createdAt DateTime @default(now())
 
-  @@map("security_reset_tokens")
+  @@map("password_reset_tokens")
 }
 
 model VerificationToken {
@@ -144,7 +223,7 @@ model VerificationToken {
   expiresAt DateTime
   createdAt DateTime @default(now())
 
-  @@map("security_verification_tokens")
+  @@map("verification_tokens")
 }
 
 model LoginAttempt {
@@ -158,7 +237,7 @@ model LoginAttempt {
   // Indexed for quick lookup: Is this IP/Email attempting too many times?
   @@index([email])
   @@index([ipAddress])
-  @@map("security_login_attempts")
+  @@map("login_attempts")
 }
 
 model IPBan {
@@ -169,7 +248,7 @@ model IPBan {
   expiresAt      DateTime? // Null for permanent ban
   createdAt      DateTime  @default(now())
 
-  @@map("security_ip_bans")
+  @@map("ip_bans")
 }
 
 model Permission {
@@ -180,13 +259,6 @@ model Permission {
   userPermissions UserPermission[]
 
   @@map("permissions")
-}
-
-enum ReportStatus {
-  PENDING
-  REVIEWED
-  ACTION_TAKEN // e.g., Post deleted, User suspended
-  REJECTED // Report deemed invalid
 }
 
 model Report {
@@ -204,7 +276,7 @@ model Report {
   updatedAt DateTime @updatedAt
 
   @@index([targetId, targetType])
-  @@map("moderation_reports")
+  @@map("reports")
 }
 
 model UserPermission {
@@ -239,7 +311,7 @@ model Follow {
   createdAt DateTime @default(now())
 
   @@unique([followerId, followingId])
-  @@map("social_follows")
+  @@map("follows")
 }
 
 // B. Block: Privacy constraint
@@ -255,14 +327,7 @@ model Block {
   createdAt DateTime @default(now())
 
   @@unique([blockerId, blockedId])
-  @@map("social_blocks")
-}
-
-enum RequestStatus {
-  PENDING
-  ACCEPTED
-  REJECTED
-  CANCELED // Optional: If the sender retracts it
+  @@map("blocks")
 }
 
 // C. FriendRequest: The state required to establish mutual connection
@@ -281,7 +346,7 @@ model FriendRequest {
   updatedAt DateTime @updatedAt
 
   @@unique([senderId, receiverId]) // Ensures sender cannot request the same person twice
-  @@map("social_friend_requests")
+  @@map("friend_requests")
 }
 
 // D. Friendship: The final, mutual connection
@@ -298,15 +363,7 @@ model Friendship {
   establishedAt DateTime @default(now())
 
   @@unique([userAId, userBId]) // Unique constraint on the pair (assuming canonical ordering enforced by app logic)
-  @@map("social_friendships")
-}
-
-enum ReactionType {
-  LIKE
-  LOVE
-  HAHA
-  SAD
-  ANGRY
+  @@map("friendships")
 }
 
 // ----------------------------------------------------
@@ -346,7 +403,7 @@ model Comment {
   @@index([authorId])
   @@index([parentId])
   @@index([replyingToId]) // Good for finding all replies directed at a user
-  @@map("content_comments")
+  @@map("comments")
 }
 
 // ----------------------------------------------------
@@ -363,7 +420,7 @@ model PostReaction {
   createdAt DateTime     @default(now())
 
   @@id([userId, postId]) // A user can only react to a post once (though they can change the reaction type)
-  @@map("content_post_reactions")
+  @@map("post_reactions")
 }
 
 // ----------------------------------------------------
@@ -380,20 +437,7 @@ model CommentReaction {
   createdAt DateTime     @default(now())
 
   @@id([userId, commentId]) // A user can only react to a comment once
-  @@map("content_comment_reactions")
-}
-
-enum Visibility {
-  PUBLIC
-  FOLLOWERS
-  PRIVATE
-  FRIENDS // Only visible to users in the Friendship table
-}
-
-enum MediaType {
-  IMAGE
-  VIDEO
-  GIF
+  @@map("comment_reactions")
 }
 
 model Post {
@@ -402,6 +446,7 @@ model Post {
   authorId String
   author   User   @relation("PostAuthor", fields: [authorId], references: [id]) // ⬅️ Unique Relation Name Added
 
+  title   String
   content String // The main text
 
   isEdited   Boolean    @default(false)
@@ -422,7 +467,7 @@ model Post {
 
   @@index([authorId, createdAt])
   @@index([visibility, createdAt])
-  @@map("content_posts")
+  @@map("posts")
 }
 
 model Media {
@@ -444,7 +489,7 @@ model Media {
 
   @@index([postId])
   @@index([uploadingUserId])
-  @@map("content_media")
+  @@map("media")
 }
 
 model Tag {
@@ -454,7 +499,7 @@ model Tag {
 
   posts PostTag[]
 
-  @@map("content_tags")
+  @@map("tags")
 }
 
 model PostTag {
@@ -465,18 +510,7 @@ model PostTag {
   tag   Tag    @relation(fields: [tagId], references: [id])
 
   @@id([postId, tagId]) // Composite key
-  @@map("content_post_tags")
-}
-
-enum Platforms {
-  FACEBOOK
-  LINKEDIN
-  YOUTUBE
-  INSTAGRAM
-  X // Formerly Twitter
-  TIKTOK
-  GITHUB
-  PERSONAL_WEBSITE // Good generic option
+  @@map("post_tags")
 }
 
 model SocialLink {
@@ -491,17 +525,7 @@ model SocialLink {
   // (e.g., a "personal" GitHub and a "work" GitHub, though usually you enforce unique on platform/profileId)
   @@unique([profileId, platform])
   @@index([profileId])
-  @@map("profile_social_links")
-}
-
-enum NotificationType {
-  POST_LIKE // Triggered when a user likes a post
-  COMMENT_REPLY // Triggered when a user replies to a comment
-  POST_COMMENT // Triggered when a user comments on your post
-  FRIEND_REQUEST // Triggered when someone sends a friend request
-  FRIEND_ACCEPTED // Triggered when a friend request is accepted
-  USER_MENTION // Triggered when a user is tagged (@user)
-  SYSTEM_ALERT // e.g., Your subscription is expiring
+  @@map("social_links")
 }
 
 model Notification {
@@ -523,14 +547,9 @@ model Notification {
   createdAt DateTime @default(now())
 
   @@index([recipientId, isRead, createdAt]) // Crucial index for dashboard performance
-  @@map("system_notifications")
+  @@map("notifications")
 }
 
-// NOTE: We need to add the relations back to the main User model:
-// model User {
-//   // ... existing fields ...
-
-// }
 model NotificationSettings {
   id String @id @default(uuid())
 
@@ -549,7 +568,7 @@ model NotificationSettings {
 
   updatedAt DateTime @updatedAt
 
-  @@map("system_notification_settings")
+  @@map("notification_settings")
 }
 
 model PostView {
@@ -570,20 +589,7 @@ model PostView {
   // We index on postId to quickly tally views for a specific post.
   @@index([postId, viewedAt])
   @@index([userId, postId])
-  @@map("analytics_post_views")
-}
-
-enum GroupPrivacy {
-  PUBLIC // Visible and joinable by anyone
-  PRIVATE // Visible, but requires approval/invite
-  HIDDEN // Not visible in searches/lists, invite only
-}
-
-enum GroupRole {
-  MEMBER
-  MODERATOR
-  ADMIN
-  OWNER
+  @@map("post_views")
 }
 
 model Group {
@@ -604,7 +610,7 @@ model Group {
   posts   Post[] // All posts made in this group (requires Post model update)
 
   @@index([ownerId])
-  @@map("community_groups")
+  @@map("groups")
 }
 
 model GroupMember {
@@ -618,14 +624,7 @@ model GroupMember {
   joinedAt DateTime  @default(now())
 
   @@id([groupId, userId]) // A user can only be in a group once
-  @@map("community_group_members")
-}
-
-enum MetricType {
-  NEW_USERS
-  TOTAL_POSTS
-  DAILY_ACTIVE_USERS // DAU
-  NEW_FRIENDSHIPS
+  @@map("group_members")
 }
 
 model DailyMetric {
@@ -635,13 +634,7 @@ model DailyMetric {
   value Int
 
   @@unique([date, type]) // Only one record per metric per day
-  @@map("analytics_daily_metrics")
-}
-
-enum StoryType {
-  IMAGE
-  VIDEO
-  TEXT // ⬅️ NEW: For text-only backgrounds
+  @@map("daily_metrics")
 }
 
 model Story {
@@ -669,7 +662,7 @@ model Story {
 
   @@index([authorId, createdAt])
   @@index([expiresAt])
-  @@map("content_stories")
+  @@map("stories")
 }
 
 model StoryView {
@@ -682,5 +675,36 @@ model StoryView {
 
   @@unique([storyId, viewerId])
   @@index([viewerId, viewedAt])
-  @@map("analytics_story_views")
+  @@map("story_views")
+}
+
+model AuditLog {
+  id String @id @default(uuid())
+
+  // Who did it
+  actorId String?
+  actor   User?   @relation("AuditActor", fields: [actorId], references: [id])
+
+  // What happened
+  action   String // e.g., "USER_REGISTER", "POST_DELETE", "USER_BAN"
+  entity   String // e.g., "User", "Post", "Comment"
+  entityId String // ID of the thing that changed
+
+  // Optional: old/new values (JSON for flexibility)
+  oldValue Json?
+  newValue Json?
+
+  // Context
+  ipAddress String?
+  userAgent String?
+  metadata  Json? // anything extra (e.g., reason for ban)
+
+  // When
+  createdAt DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([entity, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
 }

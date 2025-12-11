@@ -1,18 +1,22 @@
-import { loginSchema, registerSchema, type LoginDTO, type LoginResult, type RegisterDTO, type RegisterResult } from "../../shared/types/authentication.types.ts"
+import { loginSchema, registerSchema, type LoginDTO, type RegisterDTO, type AuthenticationResponse  } from "../../shared/types/authentication.types.ts"
 import type { FastifyReply } from "fastify"
-import type { UserRepository } from "../../infrastructure/database/prisma/user.repository.ts"
+import type { IUserRepository } from "../../infrastructure/database/prisma/user.repository.ts"
 import type { BcryptHasher } from "../../infrastructure/security/bcrypt.hasher.ts"
 import type { JwtProvider } from "../../infrastructure/security/jwt.provider.ts"
 import { setRefreshTokenCookie } from "../../shared/utils/cookie.util.ts"
+import type { ISessionRepository } from "../../infrastructure/database/prisma/session.repository.ts"
+
+const REFRESH_TOKEN_EXPIRY_SECONDS = 30 * 24 * 60 * 60;
 
 export class RegisterUseCase {
     constructor(
-        private readonly userRepository: UserRepository,
+        private readonly userRepository: IUserRepository,
+        private readonly sessionRepository: ISessionRepository,
         private readonly hasher: BcryptHasher,
         private readonly jwt: JwtProvider
     ) {}
 
-    async execute(input: RegisterDTO, response: FastifyReply): Promise<RegisterResult> {
+    async execute(input: RegisterDTO, response: FastifyReply): Promise<AuthenticationResponse> {
         const { username, email, password } = registerSchema.parse(input)
 
         const existing = await Promise.all([
@@ -32,27 +36,39 @@ export class RegisterUseCase {
         })
         const [accessToken, refreshToken] = [this.jwt.signAccessToken({ userId: user.id }), this.jwt.signRefreshToken({ userId: user.id })]
 
+        const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_SECONDS * 1000);
+        await this.sessionRepository.create({
+            userId: user.id,
+            refreshToken,
+            ipAddress: response.request.ip || 'unknown', // Access IP from FastifyReply's request object
+            expiresAt,
+            deviceType: response.request.headers['user-agent'] || 'unknown',
+        });
+
         setRefreshTokenCookie(response, refreshToken)
 
         return {
             user: {
                 id: user.id,
                 email: user.email,
-                username: user.username,
+                username: username, 
+                role: user.role,
+                status: user.status,
             },
             accessToken
-        }
+        };
     } 
 }
 
 export class LoginUseCase {
         constructor(
-        private readonly userRepository: UserRepository,
+        private readonly userRepository: IUserRepository,
+        private readonly sessionRepository: ISessionRepository,
         private readonly hasher: BcryptHasher,
         private readonly jwt: JwtProvider
     ) {}
 
-    async execute(input: LoginDTO, response: FastifyReply): Promise<LoginResult> {
+    async execute(input: LoginDTO, response: FastifyReply): Promise<AuthenticationResponse> {
         const { identifier, password } = loginSchema.parse(input)
 
         const user = 
@@ -61,7 +77,19 @@ export class LoginUseCase {
 
         if (!user || !await this.hasher.compare(password, user.password)) throw new Error('Invalid credentials');
         
+        if (user.status !== 'ACTIVE') throw new Error('Account inactive. Please verify your email.');
+
         const [accessToken, refreshToken] = [this.jwt.signAccessToken({ userId: user.id }), this.jwt.signRefreshToken({ userId: user.id })]
+
+        const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_SECONDS * 1000);
+        await this.sessionRepository.create({
+            userId: user.id,
+            refreshToken,
+            ipAddress: response.request.ip || 'unknown', // Access IP from FastifyReply's request object
+            expiresAt,
+            deviceType: response.request.headers['user-agent'] || 'unknown',
+        });
+
 
         setRefreshTokenCookie(response, refreshToken)
 
@@ -69,9 +97,11 @@ export class LoginUseCase {
             user: {
                 id: user.id,
                 email: user.email,
-                username: user.username,
+                username: user.profile!.username, // Guaranteed to exist here
+                role: user.role,
+                status: user.status,
             },
             accessToken
-        }
+        };
     }
 }
