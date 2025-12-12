@@ -12,3 +12,7 @@ POST http://localhost:3000/api/v1/authentication/login
 Content-Type: application/json
 
 {"identifier": "mtg9ing","password": "Mohammed@99"}
+
+### POST REFRESH
+POST http://localhost:3000/api/v1/authentication/refresh
+Cookie: refreshToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJkZDhhYTkzYS1kNzE5LTQ4NjEtOGI4My1hMmNlOTZkY2RjOTAiLCJpYXQiOjE3NjU1NDY1OTQsImV4cCI6MTc2ODEzODU5NH0.namJaRI5utKJhpSI9CdqrF0FEVJ8uj85oh8EwDwR0f8

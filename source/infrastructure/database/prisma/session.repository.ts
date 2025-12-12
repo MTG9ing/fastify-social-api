@@ -13,6 +13,7 @@ export interface ISessionRepository {
     create(data: SessionCreationData): Promise<Session>;
     findByToken(refreshToken: string): Promise<Session | null>;
     revoke(sessionId: string): Promise<Session>;
+    revokeByToken(refreshToken: string): Promise<void>;
 }
 
 export class SessionRepository implements ISessionRepository {
@@ -30,6 +31,12 @@ export class SessionRepository implements ISessionRepository {
         return this.prisma.session.update({ 
             where: { id: sessionId }, 
             data: { isRevoked: true } 
+        });
+    }
+    async revokeByToken(refreshToken: string): Promise<void> {
+        await this.prisma.session.updateMany({
+            where: { refreshToken, isRevoked: false },
+            data: { isRevoked: true }
         });
     }
 }

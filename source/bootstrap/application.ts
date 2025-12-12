@@ -1,12 +1,12 @@
 import Fastify from 'fastify';
-import fastifyCookie from '@fastify/cookie'; // NEW: Cookie management for refresh token
+import fastifyCookie from '@fastify/cookie'; 
 
 // --- Infrastructure / Dependency Imports ---
 import { UserRepository, type IUserRepository } from '../infrastructure/database/prisma/user.repository.ts';
 import { SessionRepository, type ISessionRepository } from '../infrastructure/database/prisma/session.repository.ts';
-import { BcryptHasher } from '../infrastructure/security/bcrypt.hasher.ts'; // Hasher (static)
-import { JwtProvider } from '../infrastructure/security/jwt.provider.ts'; // JWT
-import { RegisterUseCase, LoginUseCase } from '../application/authentication/authentication.useCase.ts'; // Use Cases
+import { BcryptHasher } from '../infrastructure/security/bcrypt.hasher.ts'; 
+import { JwtProvider } from '../infrastructure/security/jwt.provider.ts';
+import { RegisterUseCase, LoginUseCase, LogoutUseCase, RefreshUseCase } from '../application/authentication/authentication.useCase.ts'; 
 
 // --- Plugin / Controller Imports ---
 import { healthPlugin } from '../infrastructure/plugins/health.plugin.ts';
@@ -19,6 +19,7 @@ import { prisma } from '../infrastructure/database/prisma/client.ts';
 export const application = Fastify({
     logger: {
         level: process.env.NODE_ENV === 'development' ? 'debug' : 'info',
+        
         // Dev-only: pretty logs
         transport: process.env.NODE_ENV === 'development' 
         ? { target: 'pino-pretty', options: { colorize: true } }
@@ -27,7 +28,7 @@ export const application = Fastify({
 });
 
 // --- 1. CORE SERVICE INITIALIZATION ---
-// Initialize services that are only created once (Singletons)
+// Initialize services that are only created once (Singletons) 
 const jwtProvider = new JwtProvider();
 const bcryptHasher = new BcryptHasher; 
 
@@ -38,7 +39,8 @@ const sessionRepository: ISessionRepository = new SessionRepository(prisma);
 
 const registerUseCase = new RegisterUseCase(userRepository, sessionRepository, bcryptHasher, jwtProvider);
 const loginUseCase = new LoginUseCase(userRepository, sessionRepository, bcryptHasher, jwtProvider);
-
+const logoutUseCase = new LogoutUseCase(sessionRepository);
+const refreshUseCase = new RefreshUseCase(sessionRepository, userRepository, jwtProvider)
 
 // --- 4. REGISTER PLUGINS AND CONTROLLERS ---
 // Register standard Fastify plugins
@@ -54,6 +56,8 @@ await application.register(async (app) => {
     // Pass the initialized use cases to the controller's factory function
     authenticationController(app, {
         registerUseCase,
-        loginUseCase
+        loginUseCase,
+        logoutUseCase,
+        refreshUseCase
     });
 }, { prefix: '/api/v1/authentication' });
