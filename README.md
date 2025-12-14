@@ -10,7 +10,7 @@
 
 ---
 
-### Why This Repo Gets You Hired in 2025
+### Current Features
 
 | Feature | Status | Real-World Value |
 | :--- | :---: | :--- |
@@ -22,9 +22,6 @@
 | **Zod validation + proper error format** | Done | **Type-safe, runtime-safe API** |
 | **Versioned routes (`/api/v1`)** | Done | **Production ready** |
 | **Docker + pnpm + zero-dependency dev** | Done | **One-command deploy** |
-
-This is **not** a tutorial project.
-This is **exactly** how real backends are built at Robusta, MoneyFellows, Swvl, and EU remote companies in 2025.
 
 ---
 
